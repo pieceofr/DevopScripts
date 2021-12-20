@@ -1,0 +1,43 @@
+###################################################################
+## soc-slack will execute soc. If an error happen because of timeout
+## it will retry. If there is  an error after retry, it will send
+## a slack message to sre-soc-warning channel
+## Timeout without catch up message will be consider an error
+###################################################################
+
+#!/usr/bin/env bash
+
+cd ~
+. service-env.sh
+set -ex
+
+timeout_sec=120
+catchup(){
+	timeout ${timeout_sec}s bash /home/sol/bin/soc
+	echo $?
+}
+
+slackme(){
+	curl -X POST -H 'Content-type: application/json' --data '{"text":"check soc in ba1"}' https://hooks.slack.com/services/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
+}
+
+for retry in 0 1
+do 
+	if [[ $retry == 1 ]];then
+		echo will retry catchup command in  few sec
+		sleep 3
+	fi
+	ret=$(catchup)
+	echo return=$ret
+	if [[ $ret == *"has caught up"* ]]; then
+		echo API Server is good and have catchuped latest slot
+		exit 0
+	fi
+	# timeout return 125
+	if [[ $ret == *"124"* ]]; then
+		echo "solana catchup command timeout out"
+	fi	
+done
+
+slackme
+

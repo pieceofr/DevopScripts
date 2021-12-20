@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -e
+shopt -s nullglob
+
+source ~/service-env.sh
+source ~/service-env-devnet-validator-*.sh
+
+# Keep some SOL in vote account
+MIN_VOTE_ACCOUNT_BALANCE=100
+LOG_DIR="faucet-refill-log"
+
+withdrawer_keypair=~/identity/devnet-validator-identity-"$ZONE".json
+vote_keypair=~/identity/devnet-vote-account-"$ZONE".json
+faucet_addr=$FAUCET_ADDRESS
+
+#check accounts availibility
+if !(test -f "$withdrawer_keypair"); then
+	echo "withdrawer keypair -  $withdrawer_keypair does not exist"
+	exit 1 
+fi
+
+if !(test -f "$vote_keypair"); then
+	echo "vote account keypair - $vote_keypair does not exist"
+	exit 1
+fi
+
+vote_pubkey=$(solana-keygen pubkey $vote_keypair)
+
+if [[ -z $vote_pubkey ]]; then
+	echo "unable to get vote account public key from keypair"
+	exit 1
+fi
+
+if [[ -z $faucet_addr ]]; then
+        echo "faucet address does not exist"
+        exit 1
+fi
+
+
+#get balance and extract float value
+balance=$(solana balance $vote_keypair)
+balance_amt=${balance/\ SOL/}
+
+# keep make sure tx has enough fee
+if !(( $(echo "$balance_amt > $MIN_VOTE_ACCOUNT_BALANCE" | bc) )); then
+	echo "Stop refill faucet when vote account balance is less then $MIN_VOTE_ACCOUNT_BALANCE"
+	exit 0
+fi
+
+tx_amt=$(echo "$balance_amt-$MIN_VOTE_ACCOUNT_BALANCE" | bc)
+
+echo "Transfering $tx_amt from vote account $vote_pubkey to faucet address $faucet_addr ..."
+
+to_faucet=$(solana withdraw-from-vote-account -k $withdrawer_keypair $vote_pubkey $faucet_addr $tx_amt) 
+
+if [[ $to_faucet == *"Signature:"* ]]; then
+	echo "Tx success. $to_faucet"
+	echo "faucet balance:$(solana balance $faucet_addr)"
+	exit 0
+else
+	echo "Tx fail. $to_faucet"
+	exit 1	
+fi
+
