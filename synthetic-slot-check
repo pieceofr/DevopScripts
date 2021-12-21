@@ -81,7 +81,7 @@ slot_height_local=$slot_height
 let slot_diff=$slot_height_cluster-$slot_height_local
 
 if [[ $slot_diff -lt 0 ]];then
-	let slot_diff=$slot_height_local - $slot_height_cluster
+	let slot_diff=$slot_height_local-$slot_height_cluster
 fi
 
 echo cluster_slot:$slot_height_cluster local_slot:$slot_height_local slack_diff:$slot_diff
