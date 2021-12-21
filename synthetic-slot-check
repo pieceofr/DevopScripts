@@ -49,7 +49,7 @@ get_slot_height(){
 
 # get cluster slot height
 rpc_server=$rpc_server_cluster
-rpc_server=$rpc_server_invalid # unmark to test invalid conneciton
+#rpc_server=$rpc_server_invalid # unmark to test invalid conneciton
 
 get_slot_height
 
