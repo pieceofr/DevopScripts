@@ -5,12 +5,14 @@ cd ~
 set -ex
 
 curl_timeout=5
-conn_lost_threshold=1800
-max_diff_slot=300
+conn_lost_threshold=1200
+max_diff_slot=200
 rpc_server_invalid="http://123.123.123.123:8899" # for testing 
 rpc_server_cluster=$RPC_URL
 rpc_server_local="127.0.0.1:8899"
 rpc_server="127.0.0.1:8899"
+
+echo RPC_URL=$RPC_URL
 
 # Initialzed RPC_URL_HEATH_LAST in env. The variable stores time of last healthy rpc call
 if [[ -z "$RPC_URL_HEATH_LAST" ]]; then
@@ -22,7 +24,7 @@ echo start soc-slack-rpc at $(date)
 # send a message to to sre-soc-warning slack channel
 slackme(){
 	sdata=$(jq --null-input --arg val "$slacktext" '{"text":$val}')
-        curl -X POST -H 'Content-type: application/json' --data "$sdata" "https://hooks.slack.com/services/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"
+        curl -X POST -H 'Content-type: application/json' --data "$sdata" $SYNTH_SLACK_WEBHOOK
 }
 
 # get slot height of a given node. If connection timeout happen, retry it.
@@ -34,7 +36,7 @@ get_slot_height(){
 			sleep 5
 		fi
 
-		slot_height=$(curl --connect-timeout ${curl_timeout} ${rpc_server} -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1, "method":"getBlockHeight"}' | jq ".result")
+		slot_height=$(curl --connect-timeout ${curl_timeout} ${rpc_server} -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1, "method":"getSlot"}' | jq ".result")
 
 		if [[ $slot_height -gt 0 ]];then
 			RPC_URL_HEATH_LAST=$(date +%s)
@@ -47,7 +49,7 @@ get_slot_height(){
 
 # get cluster slot height
 rpc_server=$rpc_server_cluster
-#rpc_server=$rpc_server_invalid# unmark to test invalid conneciton
+rpc_server=$rpc_server_invalid # unmark to test invalid conneciton
 
 get_slot_height
 
@@ -56,7 +58,7 @@ if [[ $slot_height -eq 0 ]];then
 	cur_time_sec=$(date +%s)
 	let conn_lost_time=$cur_time_sec-$RPC_URL_HEATH_LAST
 	if [[ $conn_lost_time -gt $threshold ]];then
-		slacktext="$rpc_server is not reachable for more thant $conn_lost_time secs"
+		slacktext=" {hostname: $HOSTNAME, errormsg:  send rpc call to $rpc_server and no response for  more than $conn_lost_time secs }"
 		slackme
 	fi
 	echo connection lost time $conn_lost_time
@@ -68,9 +70,9 @@ rpc_server=$rpc_server_local
 get_slot_height
 
 if [[ $slot_height -eq 0 ]];then
-	slacktext="$rpc_server is not reachable"
+	slacktext="{ hostname: $HOSTNAME, errormsg: send rpc call to $rpc_server and no response }"
 	slackme
-	echo localhost rpc is not reachable
+	echo send rpc call to $rpc_server and no response
 	exit 0 
 fi
 
@@ -82,10 +84,10 @@ if [[ $slot_diff -lt 0 ]];then
 	let slot_diff=$slot_height_local - $slot_height_cluster
 fi
 
-echo cluster_slot=$slot_height_cluster local_slot=$slot_height_local slack_diff=$slot_diff
+echo cluster_slot:$slot_height_cluster local_slot:$slot_height_local slack_diff:$slot_diff
 
 if [[ slot_diff -gt $max_diff_slot ]];then
-	slacktext="diff-$slot_diff, cluster-$slot_height_cluster, local-$slot_height_local"
+	slacktext="{ hostname: $HOSTNAME, diff: $slot_diff, cluster: $slot_height_cluster, local: $slot_height_local }"
 	slackme
 	exit 0
 fi
